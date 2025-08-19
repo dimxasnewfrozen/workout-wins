@@ -20,3 +20,6 @@ dist/
 build/
 # Local Netlify folder
 .netlify
+
+# don't include the real .env file
+.env

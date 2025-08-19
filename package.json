@@ -11,5 +11,9 @@
   "license": "MIT",
   "devDependencies": {
     "netlify-cli": "^17.0.0"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.35.3",
+    "dotenv": "^17.2.1"
   }
 }
