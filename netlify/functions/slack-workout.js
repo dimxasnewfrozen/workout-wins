@@ -125,10 +125,18 @@ exports.handler = async (event) => {
     if (!userDailyStars[userId]) userDailyStars[userId] = {};
     userDailyStars[userId][dateStr] = 1;
 
-    return json({
-      response_type: 'in_channel',
-      text: `:star: ${userNames[userId] || userId} got a star for ${dateStr}`
+    // Post the visible message to the channel via response_url
+    await fetch(responseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+        response_type: 'in_channel',
+        text: `:star: ${userNames[userId] || userId} got a star for ${dateStr}`
+        })
     });
+
+    // Immediately ack with no visible content (prevents extra ephemeral text)
+    return { statusCode: 200, body: '' };
   }
 
   if (rawText === 'my stars' || command2 === 'my stars') {
@@ -156,7 +164,11 @@ exports.handler = async (event) => {
   }
 
   if (rawText === 'weekly table') {
-    return json(generateWeeklyTable(today));
+    const isPublic = /\bpublic\b/.test(rawText);
+    return json({
+        response_type: isPublic ? 'in_channel' : 'ephemeral',
+        text: generateWeeklyTable(today)
+    });
   }
 
   // Help / usage
