@@ -214,58 +214,58 @@ exports.handler = async (event) => {
 
     // --- handle interactive button clicks ---
     if (body.payload) {
-    const payload = JSON.parse(body.payload);
-    if (payload.type === 'block_actions') {
-        const action = payload.actions && payload.actions[0];
-        const actionId = action?.action_id;
-        const dateStr = action?.value;
-        const userIdFromPayload = payload.user?.id;
-        const userNameFromPayload = payload.user?.username || payload.user?.name || payload.user?.profile?.display_name;
+        const payload = JSON.parse(body.payload);
+        if (payload.type === 'block_actions') {
+            const action = payload.actions && payload.actions[0];
+            const actionId = action?.action_id;
+            const dateStr = action?.value;
+            const userIdFromPayload = payload.user?.id;
+            const userNameFromPayload = payload.user?.username || payload.user?.name || payload.user?.profile?.display_name;
 
-        // track name
-        if (userIdFromPayload && userNameFromPayload) {
-        userNames[userIdFromPayload] = userNameFromPayload;
+            // track name
+            if (userIdFromPayload && userNameFromPayload) {
+            userNames[userIdFromPayload] = userNameFromPayload;
+            }
+
+            if (actionId === 'extra_star_confirm' && userIdFromPayload && dateStr) {
+            if (!userDailyStars[userIdFromPayload]) userDailyStars[userIdFromPayload] = {};
+            const newCount = (userDailyStars[userIdFromPayload][dateStr] || 0) + 1;
+            userDailyStars[userIdFromPayload][dateStr] = newCount;
+
+            // Post publicly to the same channel as the interaction
+            await fetch(payload.response_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                response_type: 'in_channel',
+                text: `:star: ${userNames[userIdFromPayload] || userIdFromPayload} logged an *additional* workout for ${dateStr} (total today: ${newCount})`
+                })
+            });
+
+            // Update/clear the ephemeral prompt
+            return {
+                statusCode: 200,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                response_action: 'update',
+                text: `Added another workout for ${dateStr}. Total today: *${newCount}*.`
+                })
+            };
+            }
+
+            if (actionId === 'extra_star_cancel') {
+            return {
+                statusCode: 200,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                response_action: 'clear' // closes the ephemeral message
+                })
+            };
+            }
         }
 
-        if (actionId === 'extra_star_confirm' && userIdFromPayload && dateStr) {
-        if (!userDailyStars[userIdFromPayload]) userDailyStars[userIdFromPayload] = {};
-        const newCount = (userDailyStars[userIdFromPayload][dateStr] || 0) + 1;
-        userDailyStars[userIdFromPayload][dateStr] = newCount;
-
-        // Post publicly to the same channel as the interaction
-        await fetch(payload.response_url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-            response_type: 'in_channel',
-            text: `:star: ${userNames[userIdFromPayload] || userIdFromPayload} logged an *additional* workout for ${dateStr} (total today: ${newCount})`
-            })
-        });
-
-        // Update/clear the ephemeral prompt
-        return {
-            statusCode: 200,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-            response_action: 'update',
-            text: `Added another workout for ${dateStr}. Total today: *${newCount}*.`
-            })
-        };
-        }
-
-        if (actionId === 'extra_star_cancel') {
-        return {
-            statusCode: 200,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-            response_action: 'clear' // closes the ephemeral message
-            })
-        };
-        }
-    }
-
-    // Unknown interaction type
-    return { statusCode: 200, body: '' };
+        // Unknown interaction type
+        return { statusCode: 200, body: '' };
     }
 
   // Help / usage
