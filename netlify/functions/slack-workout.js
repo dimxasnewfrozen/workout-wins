@@ -44,11 +44,14 @@ function generateWeeklyTableText(today) {
   table += '| Name       | ' + days.join(' | ') + ' |\n';
   table += '|------------|-----|-----|-----|-----|-----|-----|-----|\n';
 
+  const cell = (n) => n > 1 ? `⭐ x${n}` : (n === 1 ? '⭐' : ' ');
+
   for (const uid of users) {
     const name = (userNames[uid] || uid).slice(0, 20);
-    const row  = dates.map(d => (userDailyStars[uid]?.[d] ? '⭐' : ' '));
+    const row = dates.map(d => cell(userDailyStars[uid]?.[d] || 0));
     table += `| ${name.padEnd(10)} | ${row.join(' | ')} |\n`;
   }
+
   table += '```';
   return table;
 }
@@ -122,41 +125,73 @@ exports.handler = async (event) => {
     // Routes
     if (command2 === 'star me') {
     if (!userId) {
-        return json({
-        response_type: 'ephemeral',
-        text: 'Missing user_id.'
+        return json({ response_type: 'ephemeral', text: 'Missing user_id.' });
+    }
+
+    if (!userDailyStars[userId]) userDailyStars[userId] = {};
+    const current = userDailyStars[userId][dateStr] || 0;
+
+    // If first star of the day: add and post publicly
+    if (current === 0) {
+        userDailyStars[userId][dateStr] = 1;
+
+        await fetch(body.response_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            response_type: 'in_channel',
+            text: `:star: ${userNames[userId] || userId} got a star for ${dateStr}`
+        })
         });
+
+        return { statusCode: 200, body: '' };
     }
 
-    if (!userDailyStars[userId]) {
-        userDailyStars[userId] = {};
-    }
-
-  userDailyStars[userId][dateStr] = 1;
-
+    // Otherwise ask to confirm an additional star (ephemeral, visible only to the user)
     await fetch(body.response_url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-        response_type: 'in_channel',
-        text: `:star: ${userNames[userId] || userId} got a star for ${dateStr}`
-    })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+        response_type: 'ephemeral',
+        replace_original: false,
+        text: `You already recorded a workout for *${dateStr}* (total: ${current}). Add another?`,
+        blocks: [
+            { "type": "section",
+            "text": { "type": "mrkdwn", "text": `You already recorded a workout for *${dateStr}* (total: *${current}*). Add another?` }
+            },
+            { "type": "actions", "elements": [
+            {
+                "type": "button",
+                "text": { "type": "plain_text", "text": "Yes, add another" },
+                "style": "primary",
+                "action_id": "extra_star_confirm",
+                "value": dateStr
+            },
+            {
+                "type": "button",
+                "text": { "type": "plain_text", "text": "Cancel" },
+                "action_id": "extra_star_cancel",
+                "value": dateStr
+            }
+            ]}
+        ]
+        })
     });
-    return { statusCode: 200, body: '' }; // no extra app message
-}
+
+    return { statusCode: 200, body: '' };
+    }
 
   if (rawText === 'my stars' || command2 === 'my stars') {
     if (!userId) return json({ response_type: 'ephemeral', text: 'Missing user_id.' });
-    const count = getWeekDates(today).filter(d => userDailyStars[userId]?.[d]).length;
+    const count = getWeekDates(today).reduce((acc, d) => acc + (userDailyStars[userId]?.[d] || 0), 0);
     return json({ response_type: 'ephemeral', text: `:star: ${count} stars this week.` });
   }
 
   if (rawText === 'weekly stars') {
     const leaderboard = Object.keys(userDailyStars).map(uid => {
-      const count = getWeekDates(today).filter(d => userDailyStars[uid]?.[d]).length;
-      return { name: userNames[uid] || uid, count };
-    }).filter(x => x.count > 0)
-      .sort((a, b) => b.count - a.count);
+    const count = getWeekDates(today).reduce((acc, d) => acc + (userDailyStars[uid]?.[d] || 0), 0);
+    return { name: userNames[uid] || uid, count };
+    }).filter(e => e.count > 0).sort((a,b) => b.count - a.count);
 
     if (leaderboard.length === 0) {
       return json({ response_type: 'in_channel', text: 'No stars this week yet!' });
@@ -177,6 +212,62 @@ exports.handler = async (event) => {
     });
     }
 
+    // --- handle interactive button clicks ---
+    if (body.payload) {
+    const payload = JSON.parse(body.payload);
+    if (payload.type === 'block_actions') {
+        const action = payload.actions && payload.actions[0];
+        const actionId = action?.action_id;
+        const dateStr = action?.value;
+        const userIdFromPayload = payload.user?.id;
+        const userNameFromPayload = payload.user?.username || payload.user?.name || payload.user?.profile?.display_name;
+
+        // track name
+        if (userIdFromPayload && userNameFromPayload) {
+        userNames[userIdFromPayload] = userNameFromPayload;
+        }
+
+        if (actionId === 'extra_star_confirm' && userIdFromPayload && dateStr) {
+        if (!userDailyStars[userIdFromPayload]) userDailyStars[userIdFromPayload] = {};
+        const newCount = (userDailyStars[userIdFromPayload][dateStr] || 0) + 1;
+        userDailyStars[userIdFromPayload][dateStr] = newCount;
+
+        // Post publicly to the same channel as the interaction
+        await fetch(payload.response_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+            response_type: 'in_channel',
+            text: `:star: ${userNames[userIdFromPayload] || userIdFromPayload} logged an *additional* workout for ${dateStr} (total today: ${newCount})`
+            })
+        });
+
+        // Update/clear the ephemeral prompt
+        return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+            response_action: 'update',
+            text: `Added another workout for ${dateStr}. Total today: *${newCount}*.`
+            })
+        };
+        }
+
+        if (actionId === 'extra_star_cancel') {
+        return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+            response_action: 'clear' // closes the ephemeral message
+            })
+        };
+        }
+    }
+
+    // Unknown interaction type
+    return { statusCode: 200, body: '' };
+    }
+
   // Help / usage
   return json({
     response_type: 'ephemeral',
@@ -186,6 +277,7 @@ exports.handler = async (event) => {
 • \`/workout-wins star me for mm/dd/yyyy\` – Add a star for a specific day
 • \`/workout-wins my stars\` – View your weekly total
 • \`/workout-wins weekly stars\` – View the leaderboard
-• \`/workout-wins weekly table\` – View the weekly table`
+• \`/workout-wins weekly table\` – View the weekly table (visible only to you)
+• \`/workout-wins weekly table public\` – Post the weekly table to the channel`
   });
 };
