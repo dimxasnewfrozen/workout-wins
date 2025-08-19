@@ -33,31 +33,24 @@ function getWeekDates(date) {
   });
 }
 
-function generateWeeklyTable(today) {
+function generateWeeklyTableText(today) {
   const dates = getWeekDates(today);
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
   const users = Object.keys(userDailyStars);
-  if (users.length === 0) {
-    return {
-      response_type: 'in_channel',
-      text: 'No stars recorded yet this week.'
-    };
-  }
+  if (users.length === 0) return 'No stars recorded yet this week.';
 
-  // Build a Slack-friendly monospace table
   let table = '*Weekly Workout Table*\n```\n';
   table += '| Name       | ' + days.join(' | ') + ' |\n';
   table += '|------------|-----|-----|-----|-----|-----|-----|-----|\n';
 
   for (const uid of users) {
     const name = (userNames[uid] || uid).slice(0, 20);
-    const row = dates.map(d => (userDailyStars[uid] && userDailyStars[uid][d]) ? '⭐' : ' ');
+    const row  = dates.map(d => (userDailyStars[uid]?.[d] ? '⭐' : ' '));
     table += `| ${name.padEnd(10)} | ${row.join(' | ')} |\n`;
   }
   table += '```';
-
-  return { response_type: 'in_channel', text: table };
+  return table;
 }
 
 function parseSlackBody(event) {
@@ -155,9 +148,13 @@ exports.handler = async (event) => {
     });
   }
 
-  if (rawText === 'weekly table') {
-    return json(generateWeeklyTable(today));
-  }
+    if (rawText.startsWith('weekly table')) {
+    const isPublic = /\bpublic\b/.test(rawText);
+    return json({
+        response_type: isPublic ? 'in_channel' : 'ephemeral',
+        text: generateWeeklyTableText(today)
+    });
+    }
 
   // Help / usage
   return json({
