@@ -99,40 +99,52 @@ exports.handler = async (event) => {
 
   const parts = rawText.split(/\s+/); // e.g. ["star","me","8/18/2025"]
   const command2 = parts.slice(0, 2).join(' '); // "star me"
-  const dateArg = parts[2]; // optional date
 
-  // default target date = today
-  let targetDate = new Date();
-  if (dateArg) {
+  // support optional "for"
+    let dateArg = null;
+    if (parts[2] === 'for') {
+    dateArg = parts[3];
+    } else {
+    dateArg = parts[2];
+    }
+
+    // default target date = today
+    let targetDate = new Date();
+    if (dateArg) {
     const parsed = new Date(dateArg);
     if (!isNaN(parsed)) targetDate = parsed;
-  }
-  const dateStr = targetDate.toISOString().split('T')[0];
+    }
+    const dateStr = targetDate.toISOString().split('T')[0];
 
   const today = new Date();
   const weekKey = getWeekKey(today);
 
-  // Routes
-if (command2 === 'star me') {
-  if (!userId) {
-    return json({
-      response_type: 'ephemeral',
-      text: 'Missing user_id.'
-    });
-  }
+    // Routes
+    if (command2 === 'star me') {
+    if (!userId) {
+        return json({
+        response_type: 'ephemeral',
+        text: 'Missing user_id.'
+        });
+    }
 
-  if (!userDailyStars[userId]) {
-    userDailyStars[userId] = {};
-  }
+    if (!userDailyStars[userId]) {
+        userDailyStars[userId] = {};
+    }
 
   userDailyStars[userId][dateStr] = 1;
 
-  // only send the announcement, not the user’s command
-  return json({
-    response_type: 'in_channel',
-    text: `:star: ${userNames[userId] || userId} got a star for ${dateStr}`
-  });
+    await fetch(body.response_url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        response_type: 'in_channel',
+        text: `:star: ${userNames[userId] || userId} got a star for ${dateStr}`
+    })
+    });
+    return { statusCode: 200, body: '' }; // no extra app message
 }
+
   if (rawText === 'my stars' || command2 === 'my stars') {
     if (!userId) return json({ response_type: 'ephemeral', text: 'Missing user_id.' });
     const count = getWeekDates(today).filter(d => userDailyStars[userId]?.[d]).length;
@@ -171,7 +183,7 @@ if (command2 === 'star me') {
     text:
 `Usage:
 • \`/workout-wins star me\` – Add a star
-• \`/workout-wins star me mm/dd/yyyy\` – Add a star for a specific day
+• \`/workout-wins star me for mm/dd/yyyy\` – Add a star for a specific day
 • \`/workout-wins my stars\` – View your weekly total
 • \`/workout-wins weekly stars\` – View the leaderboard
 • \`/workout-wins weekly table\` – View the weekly table`
