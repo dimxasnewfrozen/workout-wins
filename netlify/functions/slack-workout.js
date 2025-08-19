@@ -113,17 +113,26 @@ exports.handler = async (event) => {
   const weekKey = getWeekKey(today);
 
   // Routes
-  if (command2 === 'star me') {
-    if (!userId) return json({ response_type: 'ephemeral', text: 'Missing user_id.' });
-    if (!userDailyStars[userId]) userDailyStars[userId] = {};
-    userDailyStars[userId][dateStr] = 1;
-
+if (command2 === 'star me') {
+  if (!userId) {
     return json({
-      response_type: 'in_channel',
-      text: `:star: ${userNames[userId] || userId} got a star for ${dateStr}`
+      response_type: 'ephemeral',
+      text: 'Missing user_id.'
     });
   }
 
+  if (!userDailyStars[userId]) {
+    userDailyStars[userId] = {};
+  }
+
+  userDailyStars[userId][dateStr] = 1;
+
+  // only send the announcement, not the user’s command
+  return json({
+    response_type: 'in_channel',
+    text: `:star: ${userNames[userId] || userId} got a star for ${dateStr}`
+  });
+}
   if (rawText === 'my stars' || command2 === 'my stars') {
     if (!userId) return json({ response_type: 'ephemeral', text: 'Missing user_id.' });
     const count = getWeekDates(today).filter(d => userDailyStars[userId]?.[d]).length;
