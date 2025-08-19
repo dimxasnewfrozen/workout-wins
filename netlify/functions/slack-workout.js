@@ -31,20 +31,30 @@ const starsKey = (userId) => `stars:${ENV}:${userId}`; // hash: dateStr -> count
 // ─────────────────────────────────────────────────────────────────────────────
 // Timezone-safe date helpers
 // ─────────────────────────────────────────────────────────────────────────────
-const TZ = process.env.WORKOUT_TZ || 'America/New_York';
-const fmtDateKey = (d) =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
-// Mon–Sun keys (YYYY-MM-DD) for the "today" week in TZ
+// Format a Date as YYYY-MM-DD using the server's local clock.
+function fmtDateKey(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Return Mon–Sun date keys (YYYY-MM-DD) for the week of `today`,
+// computed using the server's local clock.
 function getWeekDateKeys(today) {
-  const tzNow = new Date(new Date(today).toLocaleString('en-US', { timeZone: TZ }));
-  const monday = new Date(tzNow);
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
-  return Array.from({ length: 7 }, (_, i) => {
+  // "Midnight" of today in local time
+  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  // Monday as start of week
+  const monday = new Date(base);
+  monday.setDate(base.getDate() - ((base.getDay() + 6) % 7)); // 0=Sun → 6, 1=Mon → 0, etc.
+
+  const keys = [];
+  for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    return fmtDateKey(d);
-  });
+    keys.push(fmtDateKey(d));
+  }
+  return keys;
 }
 
 // ISO week label for leaderboard header
