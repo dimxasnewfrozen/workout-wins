@@ -147,11 +147,20 @@ function json(obj) {
 async function postToResponseUrl(response_url, payload) {
   await fetch(response_url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 }
-function pickDateFromText(rawText) {
-  const parts = rawText.split(/\s+/);
-  return parts[2] === 'for' ? parts[3] : parts[2]; // support "star me for 8/10/2025"
-}
 
+function pickDatesFromText(rawText) {
+  const parts = rawText.split(/\s+/);
+
+  // Handle "star me for 8/27/2025 8/28/2025"
+  let dates = [];
+  let idx = parts[2] === 'for' ? 3 : 2;
+  for (let i = idx; i < parts.length; i++) {
+    if (/\d{1,2}\/\d{1,2}\/\d{4}/.test(parts[i])) {
+      dates.push(parts[i]);
+    }
+  }
+  return dates;
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // Presentation helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,20 +226,27 @@ async function handleInteraction(body) {
 async function handleStarMe(body, userId, userName, rawText) {
   await ensureUser(userId, userName);
 
-  let target = new Date();
-  const dateArg = pickDateFromText(rawText);
-  if (dateArg) { const p = new Date(dateArg); if (!isNaN(p)) target = p; }
-  const dateStr = fmtDateKey(target);
+  let dateArgs = pickDatesFromText(rawText);
 
-  const newCount = await recordStar(userId, userName, dateStr);
+  // If no valid dates found, default to today
+  if (!dateArgs || dateArgs.length === 0) {
+    dateArgs = [new Date().toLocaleDateString("en-US")]; // e.g. "8/27/2025"
+  }
 
-  if (newCount === 1) {
-    // First star → announce publicly
-    await postToResponseUrl(body.response_url, {
-      response_type: 'in_channel',
-      text: `:star: ${(userName || userId)} got a star for ${dateStr}`
-    });
-    return { statusCode: 200, body: '' };
+  for (const dateArg of dateArgs) {
+    const p = new Date(dateArg);
+    if (!isNaN(p)) {
+      const dateStr = fmtDateKey(p);
+      const newCount = await recordStar(userId, userName, dateStr);
+
+      if (newCount === 1) {
+        //console.log(`${(userName || userId)} got a star for ${dateStr}`);
+        await postToResponseUrl(body.response_url, {
+          response_type: 'in_channel',
+          text: `:star: ${(userName || userId)} got a star for ${dateStr}`
+        });
+      }
+    }
   }
 
   // Additional star → confirm with ephemeral buttons
