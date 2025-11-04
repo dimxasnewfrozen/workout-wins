@@ -240,31 +240,31 @@ async function handleStarMe(body, userId, userName, rawText) {
       const newCount = await recordStar(userId, userName, dateStr);
 
       if (newCount === 1) {
-        //console.log(`${(userName || userId)} got a star for ${dateStr}`);
+        // First star of the day
         await postToResponseUrl(body.response_url, {
           response_type: 'in_channel',
           text: `:star: ${(userName || userId)} got a star for ${dateStr}`
         });
+      } else {
+        // Additional star → confirm with ephemeral buttons
+        await postToResponseUrl(body.response_url, {
+          response_type: 'ephemeral',
+          replace_original: false,
+          text: `You already recorded a workout for *${dateStr}* (total: *${newCount}*). Add another?`,
+          blocks: [
+            { type: 'section', text: { type: 'mrkdwn', text: `You already recorded a workout for *${dateStr}* (total: *${newCount}*). Add another?` } },
+            {
+              type: 'actions',
+              elements: [
+                { type: 'button', text: { type: 'plain_text', text: 'Yes, add another' }, style: 'primary', action_id: 'extra_star_confirm', value: dateStr },
+                { type: 'button', text: { type: 'plain_text', text: 'Cancel' }, action_id: 'extra_star_cancel', value: dateStr }
+              ]
+            }
+          ]
+        });
       }
     }
   }
-
-  // Additional star → confirm with ephemeral buttons
-  await postToResponseUrl(body.response_url, {
-    response_type: 'ephemeral',
-    replace_original: false,
-    text: `You already recorded a workout for *${dateStr}* (total: *${newCount}*). Add another?`,
-    blocks: [
-      { type: 'section', text: { type: 'mrkdwn', text: `You already recorded a workout for *${dateStr}* (total: *${newCount}*). Add another?` } },
-      {
-        type: 'actions',
-        elements: [
-          { type: 'button', text: { type: 'plain_text', text: 'Yes, add another' }, style: 'primary', action_id: 'extra_star_confirm', value: dateStr },
-          { type: 'button', text: { type: 'plain_text', text: 'Cancel' }, action_id: 'extra_star_cancel', value: dateStr }
-        ]
-      }
-    ]
-  });
 
   return { statusCode: 200, body: '' };
 }
